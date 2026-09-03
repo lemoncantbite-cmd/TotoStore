@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabaseClient';
 
 
@@ -24,7 +25,7 @@ export interface ListingRecord {
   created_at: string;
   updated_at: string;
   photos?: Array<{ id: string; url: string; is_primary: boolean; sort_order: number }>;
-  seller?: { full_name: string | null; phone: string | null };
+  seller?: { full_name: string | null; avatar_url: string | null; phone: string | null };
 }
 
 export interface CreateListingInput {
@@ -59,7 +60,38 @@ export interface ListingsPageResult {
   page: number;
   pageSize: number;
   hasMore: boolean;
+  fromCache?: boolean;
 }
+
+const LISTINGS_CACHE_PREFIX = 'totostore:listings:';
+const LISTING_CACHE_PREFIX = 'totostore:listing:';
+
+const getListingsCacheKey = (params: ListListingsParams) =>
+  `${LISTINGS_CACHE_PREFIX}${JSON.stringify({
+    page: params.page || 1,
+    pageSize: params.pageSize || 10,
+    sellerId: params.sellerId || '',
+    search: params.search?.trim() || '',
+    status: params.status || '',
+    category: params.category || '',
+  })}`;
+
+const readCache = async <T,>(key: string): Promise<T | null> => {
+  try {
+    const cached = await AsyncStorage.getItem(key);
+    return cached ? (JSON.parse(cached) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeCache = async (key: string, value: unknown) => {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Cache failure must never block the network result.
+  }
+};
 
 const normalizeListingPayload = (input: CreateListingInput) => ({
   title: input.title.trim(),
@@ -97,7 +129,7 @@ export async function listListings({
 
   let query = supabase
     .from('listings')
-    .select('*, photos(id, url, is_primary, sort_order), seller:public_seller_info(full_name, phone)', { count: 'exact' })
+    .select('*, photos(id, url, is_primary, sort_order), seller:public_seller_info(full_name, avatar_url, phone)', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(start, end);
 
@@ -110,26 +142,40 @@ export async function listListings({
   }
 
   const { data, error, count } = await query;
-  if (error) throw error;
+  const cacheKey = getListingsCacheKey({ page, pageSize, sellerId, search, status, category });
+  if (error) {
+    const cached = await readCache<ListingsPageResult>(cacheKey);
+    if (cached) return { ...cached, fromCache: true };
+    throw error;
+  }
 
-  return {
+  const result = {
     data: (data as ListingRecord[]) || [],
     count: count || 0,
     page,
     pageSize,
     hasMore: end + 1 < (count || 0),
   };
+  await writeCache(cacheKey, result);
+  return result;
 }
 
 export async function getListingById(id: string): Promise<ListingRecord> {
   const { data, error } = await supabase
     .from('listings')
-   .select('*, photos(id, url, is_primary, sort_order), seller:public_seller_info(full_name, phone)', { count: 'exact' })
+  .select('*, photos(id, url, is_primary, sort_order), seller:public_seller_info(full_name, avatar_url, phone)', { count: 'exact' })
     .eq('id', id)
     .single();
 
-  if (error) throw error;
-  return data as ListingRecord;
+  const cacheKey = `${LISTING_CACHE_PREFIX}${id}`;
+  if (error) {
+    const cached = await readCache<ListingRecord>(cacheKey);
+    if (cached) return cached;
+    throw error;
+  }
+  const listing = data as ListingRecord;
+  await writeCache(cacheKey, listing);
+  return listing;
 }
 
 export async function createListing(input: CreateListingInput): Promise<ListingRecord> {

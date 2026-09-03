@@ -5,15 +5,17 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../../components/AppButton';
+import BrandLabel from '../../components/BrandLabel';
 import Chip from '../../components/Chip';
+import Dropdown from '../../components/Dropdown';
 import IconButton from '../../components/IconButton';
 import TextField from '../../components/TextField';
+import { CITIES_BY_STATE, INDIAN_STATES } from '../../constants/locations';
 import { uploadImage } from '../../lib/storageUpload';
 import { supabase } from '../../lib/supabaseClient';
 import { addListingPhotos, createListing, getListingById, updateListing, type BatteryCondition, type ListingCondition } from '../../services/listings';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-
 
 const REG_NUMBER_PATTERN = /^[A-Za-z0-9]{4,11}$/;
 const TYPES = ['passenger', 'cargo', 'mini'];
@@ -29,8 +31,7 @@ export default function SellScreen() {
   const listingId = params.listingId ? String(params.listingId) : undefined;
   const isEditing = Boolean(listingId);
 
-  const [title, setTitle] = useState('');
-  const [model, setModel] = useState('');
+  const [totoName, setTotoName] = useState('');
   const [price, setPrice] = useState('');
   const [yearOfPurchase, setYearOfPurchase] = useState('');
   const [batteryCondition, setBatteryCondition] = useState<BatteryCondition>('good');
@@ -41,6 +42,7 @@ export default function SellScreen() {
   const [description, setDescription] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
+  const [existingPhotos, setExistingPhotos] = useState<{ id: string; url: string; is_primary: boolean; sort_order: number }[]>([]);
   const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [videos, setVideos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -59,8 +61,7 @@ export default function SellScreen() {
 
         if (cancelled) return;
 
-        setTitle(data.title || '');
-        setModel(data.model || '');
+        setTotoName(data.title || data.model || '');
         setPrice(String(data.price || ''));
         setYearOfPurchase(String(data.year || new Date().getFullYear()));
         setType(data.category as 'passenger' | 'cargo' | 'mini');
@@ -70,6 +71,7 @@ export default function SellScreen() {
         setDescription(data.description || '');
         setCity(data.location_city || '');
         setState(data.location_state || '');
+        setExistingPhotos(data.photos || []);
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load listing.');
@@ -100,7 +102,7 @@ export default function SellScreen() {
   };
 
   const pickPhotos = async () => {
-    const remainingSlots = MAX_PHOTOS - photos.length;
+    const remainingSlots = MAX_PHOTOS - existingPhotos.length - photos.length;
 
     if (remainingSlots <= 0) {
       Alert.alert('Photo limit reached', `You can add up to ${MAX_PHOTOS} photos.`);
@@ -150,9 +152,9 @@ export default function SellScreen() {
     });
 
     if (!result.canceled) {
-      const acceptedVideos = result.assets.filter((asset) => (asset.duration ?? 0) <= MAX_VIDEO_DURATION_MS);
+      const acceptedVideos = result.assets.filter((asset) => asset.duration != null && asset.duration <= MAX_VIDEO_DURATION_MS);
       if (acceptedVideos.length !== result.assets.length) {
-        Alert.alert('Video too long', 'Each listing video must be 1 minute or shorter.');
+        Alert.alert('Video too long', 'Each listing video must be 1 minute or shorter, and must have a valid duration.');
       }
       setVideos((current) => [...current, ...acceptedVideos].slice(0, MAX_VIDEOS));
     }
@@ -160,13 +162,12 @@ export default function SellScreen() {
 
   const handleSubmit = async () => {
     if (submitting) return;
-    const trimmedTitle = title.trim();
-    const trimmedModel = model.trim();
+    const trimmedName = totoName.trim();
     const trimmedRegistration = registrationNumber.trim();
     const trimmedCity = city.trim();
     const trimmedState = state.trim();
 
-    if (!trimmedTitle || !trimmedModel || !price.trim() || !trimmedRegistration || !trimmedCity || !trimmedState) {
+    if (!trimmedName || !price.trim() || !trimmedRegistration || !trimmedCity || !trimmedState) {
       Alert.alert('Missing details', 'Please fill in the required listing information.');
       return;
     }
@@ -176,7 +177,7 @@ export default function SellScreen() {
       return;
     }
 
-    if (trimmedTitle.length < 3 || trimmedTitle.length > 100) {
+    if (trimmedName.length < 3 || trimmedName.length > 100) {
       Alert.alert('Invalid title', 'Title must be between 3 and 100 characters.');
       return;
     }
@@ -210,10 +211,10 @@ export default function SellScreen() {
       }
 
       const payload = {
-        title: trimmedTitle,
+        title: trimmedName,
         description: description.trim(),
         price: numericPrice,
-        model: trimmedModel,
+        model: trimmedName,
         category: type,
         year: numericYear,
         battery_condition: batteryCondition,
@@ -222,7 +223,7 @@ export default function SellScreen() {
         location_state: trimmedState.toUpperCase(),
         location_country: 'India',
         condition,
-        photo_urls: [],
+        photo_urls: existingPhotos.map((photo) => photo.url),
       };
 
       let currentListingId = listingId;
@@ -236,11 +237,26 @@ export default function SellScreen() {
 
       if (currentListingId) {
         const photoUrls: string[] = [];
+        let failedCount = 0;
         for (const photo of photos) {
-          const uploadedUrl = await uploadPhoto(photo.uri, userId, currentListingId);
-          if (uploadedUrl) photoUrls.push(uploadedUrl);
+          try {
+            const uploadedUrl = await uploadPhoto(photo.uri, userId, currentListingId);
+            if (uploadedUrl) photoUrls.push(uploadedUrl);
+            else failedCount++;
+          } catch {
+            failedCount++;
+          }
         }
-        await addListingPhotos(currentListingId, photoUrls);
+        if (photoUrls.length > 0) {
+          await addListingPhotos(currentListingId, photoUrls);
+        }
+
+        if (failedCount > 0) {
+          Alert.alert(
+            'Some photos failed',
+            `${failedCount} photo${failedCount > 1 ? 's' : ''} couldn't be uploaded. You can add them later by editing the listing.`
+          );
+        }
       }
 
       if (!isEditing) {
@@ -249,7 +265,6 @@ export default function SellScreen() {
 
       router.replace('/my-listings');
     } catch (submitError) {
-      console.log('SUBMIT ERROR:', JSON.stringify(submitError, null, 2));
       setError(submitError instanceof Error ? submitError.message : 'Unable to save the listing right now.');
       Alert.alert('Save failed', submitError instanceof Error ? submitError.message : 'Unable to save the listing right now.');
     } finally {
@@ -273,7 +288,7 @@ export default function SellScreen() {
       <View style={styles.header}>
         <View style={styles.locationRow}>
           <MaterialIcons name="location-on" size={16} color={colors.onSurfaceVariant} />
-          <Text style={styles.locationText}>TotoStore</Text>
+          <BrandLabel style={styles.locationText}>TotoStore</BrandLabel>
         </View>
         <IconButton name="notifications" onPress={() => {}} />
       </View>
@@ -284,9 +299,8 @@ export default function SellScreen() {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <TextField label="Title" placeholder="e.g. Bajaj RE Compact 4S" value={title} onChangeText={setTitle} />
-        <TextField label="Model" placeholder="e.g. Bajaj RE Compact" value={model} onChangeText={setModel} />
-        <TextField label="Price (INR)" placeholder="240000" value={price} onChangeText={setPrice} keyboardType="numeric" />
+        <TextField label="Toto Name" placeholder="e.g. Bajaj RE Compact 4S" value={totoName} onChangeText={setTotoName} icon="directions-car" />
+        <TextField label="Price (INR)" placeholder="240000" value={price} onChangeText={setPrice} keyboardType="numeric" icon="currency-rupee" />
 
         <Text style={styles.fieldLabel}>Vehicle type</Text>
         <View style={styles.wrapRow}>
@@ -295,7 +309,7 @@ export default function SellScreen() {
           ))}
         </View>
 
-        <TextField label="Year" placeholder="2023" value={yearOfPurchase} onChangeText={setYearOfPurchase} keyboardType="numeric" />
+        <TextField label="Year" placeholder="2023" value={yearOfPurchase} onChangeText={setYearOfPurchase} keyboardType="numeric" icon="event" />
 
         <Text style={styles.fieldLabel}>Battery condition</Text>
         <View style={styles.wrapRow}>
@@ -314,6 +328,7 @@ export default function SellScreen() {
           }}
           autoCapitalize="characters"
           maxLength={11}
+          icon="pin"
         />
         {registrationError ? <Text style={styles.errorText}>{registrationError}</Text> : null}
 
@@ -324,13 +339,30 @@ export default function SellScreen() {
           ))}
         </View>
 
-        <TextField label="City" placeholder="New Delhi" value={city} onChangeText={setCity} />
-        <TextField label="State" placeholder="DL" value={state} onChangeText={setState} maxLength={5} />
+        <Dropdown
+  label="State"
+  placeholder="Select state"
+  value={state}
+  options={INDIAN_STATES.map((s) => ({ label: s.name, value: s.code }))}
+  onSelect={(value) => {
+    setState(value);
+    setCity('');
+  }}
+/>
+<Dropdown
+  label="City"
+  placeholder={state ? 'Select city' : 'Select a state first'}
+  value={city}
+  options={(CITIES_BY_STATE[state] || []).map((c) => ({ label: c, value: c }))}
+  onSelect={setCity}
+  disabled={!state}
+/>
         <TextField
           label="Description"
           placeholder="Describe the vehicle condition, battery health, and ownership history"
           value={description}
           onChangeText={setDescription}
+          icon="description"
         />
 
         <View style={styles.mediaHeader}>
@@ -342,7 +374,7 @@ export default function SellScreen() {
         </View>
 
         <View style={styles.mediaActions}>
-          <AppButton label={`Photos ${photos.length}/${MAX_PHOTOS}`} icon="add-photo-alternate" variant="secondary" onPress={pickPhotos} fullWidth={false} style={styles.mediaButton} />
+          <AppButton label={`Photos ${existingPhotos.length + photos.length}/${MAX_PHOTOS}`} icon="add-photo-alternate" variant="secondary" onPress={pickPhotos} fullWidth={false} style={styles.mediaButton} />
           <AppButton
           label="Videos (Coming Soon)"
           icon="videocam"
@@ -354,6 +386,17 @@ export default function SellScreen() {
         </View>
 
         <View style={styles.mediaGrid}>
+          {existingPhotos.map((photo, index) => (
+            <View key={photo.id} style={styles.mediaItem}>
+              <Image source={{ uri: photo.url }} style={styles.mediaPreview} />
+              <Pressable
+                style={styles.removeButton}
+                onPress={() => setExistingPhotos((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+              >
+                <MaterialIcons name="close" size={14} color={colors.onPrimary} />
+              </Pressable>
+            </View>
+          ))}
           {photos.map((photo, index) => (
             <View key={photo.uri} style={styles.mediaItem}>
               <Image source={{ uri: photo.uri }} style={styles.mediaPreview} />

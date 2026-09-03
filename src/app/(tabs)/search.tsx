@@ -1,10 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../../components/AppButton';
-import Chip from '../../components/Chip';
 import ListingCard from '../../components/ListingCard';
 import SearchBar from '../../components/SearchBar';
 import { getSavedListingIds, listListings, saveListing, unsaveListing, type ListingRecord } from '../../services/listings';
@@ -61,13 +60,24 @@ export default function SearchScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchListings(1);
-  }, [query, category]);
+useEffect(() => {
+  const loadListings = async () => {
+    await fetchListings(1);
+  };
+  loadListings();
+}, [query, category]);
 
   useEffect(() => {
     getSavedListingIds().then(setSavedIds).catch(() => {});
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setQuery('');
+      };
+    }, []),
+  );
 
   const visibleListings = [...items].sort((first, second) => {
     if (sortOrder === 'price-low') return Number(first.price) - Number(second.price);
@@ -137,6 +147,15 @@ export default function SearchScreen() {
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           nestedScrollEnabled
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <MaterialIcons name="search-off" size={48} color={colors.onSurfaceVariant} />
+              <Text style={styles.emptyTitle}>No listings found</Text>
+              <Text style={styles.emptyHint}>
+                Try adjusting your search or filters to find what you are looking for.
+              </Text>
+            </View>
+          }
           renderItem={({ item }) => {
             const listingKey = item.id;
             const listingDisplay = {
@@ -218,6 +237,9 @@ const styles = StyleSheet.create({
   sortText: { fontSize: 12, color: colors.onSurfaceVariant, marginRight: 2 },
   listContent: { paddingHorizontal: spacing.containerMargin, paddingBottom: 120 },
   loaderBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  emptyBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.onSurface, marginTop: 12 },
+  emptyHint: { fontSize: 13, color: colors.onSurfaceVariant, marginTop: 6, textAlign: 'center', lineHeight: 18 },
   loaderText: { marginTop: 12, color: colors.onSurfaceVariant },
   errorText: { color: colors.error, fontWeight: '600', marginBottom: 12 },
   loadMoreWrap: { paddingVertical: 12, alignItems: 'center' },

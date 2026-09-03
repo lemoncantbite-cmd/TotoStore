@@ -1,11 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../../components/AppButton';
-import Chip from '../../components/Chip';
+import BrandLabel from '../../components/BrandLabel';
 import IconButton from '../../components/IconButton';
 import ListingCard from '../../components/ListingCard';
 import SearchBar from '../../components/SearchBar';
@@ -71,7 +70,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.locationRow}>
             <MaterialIcons name="location-on" size={16} color={colors.onSurfaceVariant} />
-            <Text style={styles.brand}>Rickshaw Market</Text>
+            <BrandLabel style={styles.brand}>TotoStore</BrandLabel>
           </View>
           <IconButton name="notifications" onPress={() => {}} />
         </View>

@@ -1,10 +1,11 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "esnext",
     "lib": ["es2020"],
     "noImplicitAny": true,
     "noImplicitThis": true,
-    "types": [],
+    "types": ["jest", "node"],
     "jsx": "react",
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
@@ -12,5 +13,6 @@
     "moduleResolution": "bundler",
     "customConditions": ["react-native-strict-api"]
   },
-  "include": ["**/*.d.ts", "../types/__typetests__/**/*"]
+  "include": ["tests/**/*.ts"],
+  "exclude": []
 }

@@ -40,6 +40,7 @@ export interface Listing {
   // Compatibility alias for existing UI that still uses `id`.
   id?: string;
   tag?: 'New' | 'Used';
+  sellerPhone?: string | null;
 }
 export const maskRegistrationNumber = (registrationNumber?: string) => {
   if (!registrationNumber) return '';

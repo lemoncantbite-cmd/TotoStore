@@ -5,12 +5,13 @@ import { useCallback, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../../components/AppButton';
+import BrandLabel from '../../components/BrandLabel';
 import IconButton from '../../components/IconButton';
 import ProfileMenuItem from '../../components/ProfileMenuItem';
-import RatingBadge from '../../components/RatingBadge';
-import { uploadImage } from '../../lib/storageUpload';
-import { listListings } from '../../services/listings';
+import { getFriendlyErrorMessage } from '../../lib/errorMessages';
+import { deleteImage, uploadImage } from '../../lib/storageUpload';
 import { supabase } from '../../lib/supabaseClient';
+import { listListings } from '../../services/listings';
 import { colors } from '../../theme/colors';
 import { radius, spacing } from '../../theme/spacing';
 
@@ -22,25 +23,32 @@ export default function ProfileScreen() {
   const [listingCount, setListingCount] = useState(0);
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       const loadProfile = async () => {
-        const { data } = await supabase.auth.getUser();
-        const user = data.user;
-        if (!user) return;
-        setUserId(user.id);
-        setFullName(user.user_metadata?.full_name ?? user.user_metadata?.name ?? '');
-        const listingsResult = await listListings({ sellerId: user.id, status: 'active' });
-        setListingCount(listingsResult.count);
+        try {
+          setLoadError(null);
+          const { data, error: userErr } = await supabase.auth.getUser();
+          if (userErr || !data.user) throw userErr ?? new Error('No user found');
+          const user = data.user;
+          setUserId(user.id);
+          setFullName(user.user_metadata?.full_name ?? user.user_metadata?.name ?? '');
+          const listingsResult = await listListings({ sellerId: user.id, status: 'active' });
+          setListingCount(listingsResult.count);
 
-        const { data: profile } = await supabase
-          .from('users')
-          .select('avatar_url, phone')
-          .eq('id', user.id)
-          .maybeSingle();
-        setAvatarUrl(profile?.avatar_url ?? null);
-        setPhone(profile?.phone ?? '');
+          const { data: profile, error: profileErr } = await supabase
+            .from('users')
+            .select('avatar_url, phone')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (profileErr) throw profileErr;
+          setAvatarUrl(profile?.avatar_url ?? null);
+          setPhone(profile?.phone ?? '');
+        } catch (error) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load profile.');
+        }
       };
       loadProfile();
     }, [])
@@ -66,14 +74,16 @@ export default function ProfileScreen() {
     try {
       const asset = result.assets[0];
       const uploadedUrl = await uploadImage(asset.uri, 'profile-photos', userId);
+      const bustedUrl = `${uploadedUrl}?v=${Date.now()}`;
+
       const { error: profileError } = await supabase
         .from('users')
-        .update({ avatar_url: uploadedUrl })
+        .update({ avatar_url: bustedUrl })
         .eq('id', userId);
       if (profileError) throw profileError;
-      setAvatarUrl(`${uploadedUrl}?v=${Date.now()}`);
+      setAvatarUrl(bustedUrl);
     } catch (error) {
-      Alert.alert('Upload failed', error instanceof Error ? error.message : 'Unable to update your photo.');
+      Alert.alert('Upload failed', getFriendlyErrorMessage(error, 'Unable to update your photo.'));
     } finally {
       setBusy(false);
     }
@@ -83,13 +93,20 @@ export default function ProfileScreen() {
     if (!userId || busy || !avatarUrl) return;
     setBusy(true);
     try {
-      const { error: storageError } = await supabase.storage.from('profile-photos').remove([`${userId}.jpg`]);
-      if (storageError) throw storageError;
+      // Update DB first — if this fails, storage file is untouched, no orphaned reference.
       const { error: profileError } = await supabase.from('users').update({ avatar_url: null }).eq('id', userId);
       if (profileError) throw profileError;
+
       setAvatarUrl(null);
+
+      // Storage cleanup after DB is already consistent. Filename must match
+      // exactly what uploadImage() generates for profile-photos: `${userId}.jpg`.
+      const { success, error: storageError } = await deleteImage('profile-photos', `${userId}.jpg`);
+      if (!success) {
+        console.warn('Profile photo removed from profile but storage cleanup failed:', storageError);
+      }
     } catch (error) {
-      Alert.alert('Delete failed', error instanceof Error ? error.message : 'Unable to delete your photo.');
+      Alert.alert('Delete failed', getFriendlyErrorMessage(error, 'Unable to delete your photo.'));
     } finally {
       setBusy(false);
     }
@@ -108,10 +125,11 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {loadError ? <Text style={{ color: colors.error, marginBottom: 12 }}>{loadError}</Text> : null}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <IconButton name="menu" tone="ghost" onPress={() => {}} />
-            <Text style={styles.brand}>RickshawMart</Text>
+            <BrandLabel style={styles.brand}>TotoStore</BrandLabel>
           </View>
           <IconButton name="notifications" tone="ghost" onPress={() => {}} />
         </View>
@@ -151,7 +169,7 @@ export default function ProfileScreen() {
           <ProfileMenuItem icon="list-alt" title="My Listings" subtitle="Manage your vehicles for sale" onPress={() => router.push('/my-listings')} />
           <ProfileMenuItem icon="favorite" title="Saved" subtitle="Rickshaws you've bookmarked" onPress={() => router.push('/saved')} />
           <ProfileMenuItem icon="chat" title="Chat Inbox" subtitle="Messages with buyers & sellers" onPress={() => Alert.alert('Coming Soon', 'Chat inbox will be available soon!')} />
-          <ProfileMenuItem icon="settings" title="Settings" subtitle="Account, privacy, and notifications" onPress={() => Alert.alert('Coming Soon', 'Settings will be available soon!')} />
+          <ProfileMenuItem icon="settings" title="Settings" subtitle="Account, privacy, and notifications" onPress={() => router.push('/settings')} />
           <ProfileMenuItem icon="help" title="Help & Support" subtitle="FAQs and customer service" onPress={() => Alert.alert('Coming Soon', 'Help & Support will be available soon!')} />
           <ProfileMenuItem icon="logout" title="Log Out" subtitle="Sign out of your current session" danger onPress={handleLogout} />
         </View>

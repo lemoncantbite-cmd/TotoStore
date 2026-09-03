@@ -1,12 +1,12 @@
-import { Stack, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../components/AppButton';
+import { supabase } from '../lib/supabaseClient';
 import { deleteListing, listListings, type ListingRecord } from '../services/listings';
 import { colors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
-import { supabase } from '../lib/supabaseClient';
 
 const PAGE_SIZE = 10;
 
@@ -47,9 +47,14 @@ export default function MyListingsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchListings(1, false);
-  }, [fetchListings]);
+useFocusEffect(
+  useCallback(() => {
+    const loadListings = async () => {
+      await fetchListings(1, false);
+    };
+    loadListings();
+  }, [fetchListings]),
+);
 
   const handleDelete = async (id: string) => {
     Alert.alert('Delete listing', 'Are you sure you want to remove this listing?', [

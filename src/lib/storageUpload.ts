@@ -9,8 +9,19 @@ export async function uploadImage(localUri: string, bucket: StorageBucket, userI
     throw new Error('Image URI is required.');
   }
 
-  const extension = (localUri.split('.').pop() ?? 'jpg').split('?')[0].toLowerCase();
-  const fileExtension = extension === 'jpeg' ? 'jpg' : extension || 'jpg';
+  if (bucket !== 'profile-photos' && bucket !== 'listing-photos') {
+    throw new Error("Use 'listing-photos' as the bucket name, not 'listing-images'.");
+  }
+
+  if (bucket === 'listing-photos' && !listingId) {
+    throw new Error('listingId is required to upload a listing photo.');
+  }
+
+  const lastSegment = localUri.split('/').pop() ?? '';
+  const rawExt = lastSegment.includes('.') ? lastSegment.split('.').pop()!.split('?')[0].toLowerCase() : '';
+  const normalizedExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
+  const fileExtension = ['jpg', 'png', 'webp'].includes(normalizedExt) ? normalizedExt : 'jpg';
+
   const mimeType =
     fileExtension === 'png' ? 'image/png' : fileExtension === 'webp' ? 'image/webp' : 'image/jpeg';
 
@@ -18,10 +29,6 @@ export async function uploadImage(localUri: string, bucket: StorageBucket, userI
     bucket === 'profile-photos'
       ? `${userId}.jpg`
       : `${userId}/${listingId}/${Date.now()}.${fileExtension}`;
-
-  if (bucket !== 'profile-photos' && bucket !== 'listing-photos') {
-    throw new Error("Use 'listing-photos' as the bucket name, not 'listing-images'.");
-  }
 
   const base64 = await FileSystem.readAsStringAsync(localUri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -40,9 +47,10 @@ export async function uploadImage(localUri: string, bucket: StorageBucket, userI
   return data.publicUrl;
 }
 
-export async function deleteImage(bucket: StorageBucket, filePath: string): Promise<void> {
+export async function deleteImage(bucket: StorageBucket, filePath: string): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.storage.from(bucket).remove([filePath]);
   if (error) {
-    console.error('Image delete failed:', error.message);
+    return { success: false, error: error.message };
   }
+  return { success: true };
 }

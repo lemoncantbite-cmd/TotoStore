@@ -14,35 +14,43 @@ export default function ListingDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!id) {
-      setError('Listing not found.');
-      setLoading(false);
-      return;
-    }
-
-    const fetchListing = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await getListingById(id);
-        setListing(data);
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load listing details.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchListing();
-  }, [id]);
-
-  const handleWhatsAppContact = () => {
+  const handleContactSeller = () => {
     if (!listing?.seller?.phone) return;
     const phone = listing.seller.phone.replace(/[^0-9]/g, '');
     const message = encodeURIComponent(`Hi, I'm interested in your listing: ${listing.title}`);
     Linking.openURL(`https://wa.me/${phone}?text=${message}`);
   };
+
+  useEffect(() => {
+  if (!id) {
+    setError('Listing not found.');
+    setLoading(false);
+    return;
+  }
+
+  const fetchListing = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getListingById(id);
+      setListing(data);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load listing details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchListing();
+}, [id]);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      router.replace('/home');
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [error, router]);
 
   if (loading) {
     return (
@@ -62,6 +70,7 @@ export default function ListingDetailsScreen() {
         <Stack.Screen options={{ title: 'Listing' }} />
         <View style={styles.centeredState}>
           <Text style={styles.errorText}>{error || 'Listing not found.'}</Text>
+          <Text style={styles.centeredText}>Redirecting to home...</Text>
           <AppButton label="Go back" fullWidth={false} onPress={() => router.back()} style={styles.backButton} />
         </View>
       </SafeAreaView>
@@ -97,14 +106,9 @@ export default function ListingDetailsScreen() {
 
         <Text style={styles.sectionTitle}>Seller</Text>
         <Text style={styles.sellerName}>{listing.seller?.full_name || 'Seller'}</Text>
-
-        <View style={styles.contactWrap}>
-          {listing.seller?.phone ? (
-            <AppButton label="Contact on WhatsApp" icon="chat" onPress={handleWhatsAppContact} />
-          ) : (
-            <Text style={styles.noContactText}>Contact info unavailable</Text>
-          )}
-        </View>
+        {listing.seller?.phone ? (
+          <AppButton label="Contact Seller" icon="chat" onPress={handleContactSeller} style={styles.contactButton} />
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -126,6 +130,5 @@ const styles = StyleSheet.create({
   sectionTitle: { marginTop: 24, fontSize: 16, fontWeight: '800', color: colors.onSurface },
   description: { marginTop: 8, color: colors.onSurfaceVariant, lineHeight: 22 },
   sellerName: { marginTop: 8, fontSize: 15, fontWeight: '600', color: colors.onSurface },
-  contactWrap: { marginTop: 16 },
-  noContactText: { fontSize: 14, color: colors.onSurfaceVariant, fontStyle: 'italic' },
+  contactButton: { marginTop: 16 },
 });

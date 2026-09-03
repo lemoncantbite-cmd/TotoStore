@@ -1,10 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { useState } from 'react';
+import { Alert, Dimensions, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 import { radius } from '../theme/spacing';
 import type { Listing } from '../types/listing';
-import { Alert, Dimensions, FlatList, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 
 export default function ListingCard({
@@ -23,16 +23,32 @@ export default function ListingCard({
   const [activeIndex, setActiveIndex] = useState(0);
   const [cardWidth, setCardWidth] = useState(Dimensions.get('window').width - 32);
   const isGrid = variant === 'grid';
+
+  // Defensive defaults — some screens pass raw/partial Supabase objects.
+  const photos = listing.photos ?? [];
+  const price = listing.price ?? 0;
+  const title = listing.title ?? 'Untitled listing';
+  const location = listing.location ?? { city: 'Unknown', state: 'Unknown', lat: 0, lng: 0 };
   const tagLabel = listing.tag ?? (listing.condition === 'new' ? 'New' : 'Used');
   const formattedPrice = new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(listing.price);
-  const locationText = `${listing.location.city}, ${listing.location.state}`;
-  const year = listing.yearOfPurchase;
+  }).format(price);
+  const locationText = `${location.city ?? 'Unknown'}, ${location.state ?? 'Unknown'}`;
+  const year = listing.yearOfPurchase ?? 'N/A';
   const km = listing.kmRun ?? 0;
   const fuelText = listing.type === 'passenger' ? 'Passenger' : listing.type === 'cargo' ? 'Cargo' : 'Mini';
+
+  const handleContactSeller = () => {
+    if (!listing.sellerPhone) {
+      Alert.alert('Contact unavailable', 'Seller contact is available only for signed-in users.');
+      return;
+    }
+    const phone = listing.sellerPhone.replace(/[^0-9]/g, '');
+    const message = encodeURIComponent(`Hi, I saw your listing "${title}" on TotoStore.`);
+    Linking.openURL(`https://wa.me/${phone}?text=${message}`);
+  };
 
   return (
     <View style={[styles.card, isGrid && styles.gridCard]}>
@@ -41,7 +57,7 @@ export default function ListingCard({
         onLayout={(e) => setCardWidth(e.nativeEvent.layout.width)}
       >
              {(() => {
-          const sortedPhotos = listing.photos.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+          const sortedPhotos = photos.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
           return sortedPhotos.length > 0 ? (
             <>
               <Image
@@ -102,7 +118,7 @@ export default function ListingCard({
             color={saved ? colors.error : colors.onSurface}
           />
         </Pressable>
-               {listing.photos.length === 0 ? (
+               {photos.length === 0 ? (
           <View style={styles.vehicleWrap}>
             <MaterialIcons name="electric-rickshaw" size={isGrid ? 30 : 38} color="#C4C7C7" />
           </View>
@@ -110,7 +126,7 @@ export default function ListingCard({
       </View>
 
       <Pressable onPress={onPress} style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>{listing.title}</Text>
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
         <Text style={styles.price}>{formattedPrice}</Text>
         <View style={styles.metaRow}>
           <MaterialIcons name="calendar-today" size={12} color={colors.onSurfaceVariant} />
@@ -124,33 +140,24 @@ export default function ListingCard({
           <MaterialIcons name="location-on" size={12} color={colors.onSurfaceVariant} style={{ marginLeft: 8 }} />
           <Text style={styles.metaText}>{locationText}</Text>
         </View>
+        {listing.sellerPhone ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              handleContactSeller();
+            }}
+            style={styles.contactButton}
+            hitSlop={8}
+          >
+            <MaterialIcons name="chat" size={16} color="#fff" />
+            <Text style={styles.contactText}>Contact Seller</Text>
+          </Pressable>
+        ) : null}
 
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            openWhatsApp((listing as any).sellerPhone, `Hi, maine aapki listing "${listing.title}" dekhi thi.`);
-          }}
-          style={styles.whatsappBtn}
-          hitSlop={8}
-        >
-          <MaterialIcons name="chat" size={16} color="#fff" />
-          <Text style={styles.whatsappText}>WhatsApp</Text>
-        </Pressable>
       </Pressable>
     </View>
   );
 }
-const openWhatsApp = (phoneNumber: string | null | undefined, message: string) => {
-  if (!phoneNumber) {
-    Alert.alert('Not available', 'Seller ne abhi phone number add nahi kiya hain');
-    return;
-  }
-  const cleanNumber = phoneNumber.replace(/\D/g, '');
-  const url = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-  Linking.openURL(url).catch(() => {
-    Alert.alert('Error', 'WhatsApp nahi khul paya');
-  });
-};
 
 const styles = StyleSheet.create({
   card: {
@@ -248,11 +255,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   body: { padding: 12 },
-  title: { fontSize: 15, color: colors.onSurface, fontWeight: '700' },
-  price: { marginTop: 4, fontSize: 18, color: colors.onSurface, fontWeight: '800' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap' },
-  metaText: { color: colors.onSurfaceVariant, fontSize: 11 },
-  whatsappBtn: {
+  contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#25D366',
@@ -263,5 +266,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 4,
   },
-  whatsappText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  contactText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  title: { fontSize: 15, color: colors.onSurface, fontWeight: '700' },
+  price: { marginTop: 4, fontSize: 18, color: colors.onSurface, fontWeight: '800' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap' },
+  metaText: { color: colors.onSurfaceVariant, fontSize: 11 },
 });

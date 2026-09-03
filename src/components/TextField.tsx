@@ -1,6 +1,9 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors } from '../theme/colors';
 import { radius } from '../theme/spacing';
+
+
 
 export default function TextField({
   label,
@@ -12,6 +15,7 @@ export default function TextField({
   maxLength,
   autoCapitalize,
   style,
+  icon,
 }: {
   label?: string;
   placeholder?: string;
@@ -22,12 +26,19 @@ export default function TextField({
   maxLength?: number;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   style?: any;
+  icon?: keyof typeof MaterialIcons.glyphMap;
 }) {
   return (
     <View style={[styles.wrap, style]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <View style={styles.labelRow}>
+          {icon ? <MaterialIcons name={icon} size={14} color={colors.onSurfaceVariant} style={styles.labelIcon} /> : null}
+          <Text style={styles.label}>{label}</Text>
+        </View>
+      ) : null}
       <View style={styles.inputRow}>
         {prefix ? <Text style={styles.prefix}>{prefix}</Text> : null}
+        {icon ? <MaterialIcons name={icon} size={18} color={colors.onSurfaceVariant} style={styles.icon} /> : null}
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -47,11 +58,18 @@ const styles = StyleSheet.create({
   wrap: {
     marginBottom: 12,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   label: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.onSurface,
-    marginBottom: 8,
+  },
+  labelIcon: {
+    marginRight: 6,
   },
   inputRow: {
     flexDirection: 'row',
@@ -66,6 +84,9 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontSize: 14,
     fontWeight: '700',
+    marginRight: 8,
+  },
+  icon: {
     marginRight: 8,
   },
   input: {
