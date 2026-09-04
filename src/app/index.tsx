@@ -4,7 +4,7 @@ import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { Link, useRouter, type Href } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../components/AppButton';
 import BrandLabel from '../components/BrandLabel';
@@ -131,7 +131,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }}>
         <View style={styles.hero}>
           <View style={styles.logoWrap}>
             <MaterialIcons name="local-taxi" size={32} color={colors.accent} />
