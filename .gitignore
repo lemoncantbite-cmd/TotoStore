@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 .env
 .vscode/
 dist/
@@ -10,11 +10,8 @@ dist/
 expo-env.d.ts
 # @end expo-cli
 .env.local
-
-.env.local
-
-.env.local
-
-.env.local
-
-.env.local
+.gradle/
+dist-android/
+android/build/
+*.log
+*.keystore
