@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../../components/AppButton';
 import BrandLabel from '../../components/BrandLabel';
@@ -15,6 +15,30 @@ import { spacing } from '../../theme/spacing';
 
 
 const CATEGORIES = ['All Listings', 'New Arrivals', 'Used', 'Electric', 'Commercial'];
+
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  scroll: { paddingBottom: 120 },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.containerMargin,
+    paddingTop: 8,
+  },
+  locationRow: { flexDirection: 'row', alignItems: 'center' },
+  brand: { fontSize: 20, fontWeight: '800', color: colors.onSurface, marginLeft: 4 },
+  searchWrap: { paddingHorizontal: spacing.containerMargin, marginTop: 16 },
+  chipRow: { paddingHorizontal: spacing.containerMargin, paddingVertical: 16 },
+  section: { paddingHorizontal: spacing.containerMargin, marginTop: 8 },
+    cardWrap: { paddingHorizontal: spacing.containerMargin, marginTop: 12 },
+  loaderBox: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loaderText: { marginTop: 12, color: colors.onSurfaceVariant },
+  errorText: { color: colors.error, fontWeight: '600', marginBottom: 12 },
+  emptyText: { color: colors.onSurfaceVariant, fontSize: 14 },
+});
+
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -64,110 +88,99 @@ export default function HomeScreen() {
     }
   };
 
+  const ListHeader = (
+    <>
+      <View style={styles.header}>
+        <View style={styles.locationRow}>
+          <MaterialIcons name="location-on" size={16} color={colors.onSurfaceVariant} />
+          <BrandLabel style={styles.brand}>TotoStore</BrandLabel>
+        </View>
+        <IconButton name="notifications" onPress={() => {}} />
+      </View>
+
+      <View style={styles.searchWrap}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={() => router.push({ pathname: '/search', params: { query: searchQuery } })}
+          onFilterPress={() => router.push('/filters')}
+        />
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Featured Autos" actionLabel="View all" onActionPress={() => router.push('/search')} />
+      </View>
+    </>
+  );
+
+  const ListEmpty = loading ? (
+    <View style={styles.loaderBox}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.loaderText}>Loading listings...</Text>
+    </View>
+  ) : error ? (
+    <View style={styles.loaderBox}>
+      <Text style={styles.errorText}>{error}</Text>
+      <AppButton label="Retry" fullWidth={false} onPress={fetchListings} />
+    </View>
+  ) : (
+    <View style={styles.loaderBox}>
+      <Text style={styles.emptyText}>No listings yet.</Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-        <View style={styles.header}>
-          <View style={styles.locationRow}>
-            <MaterialIcons name="location-on" size={16} color={colors.onSurfaceVariant} />
-            <BrandLabel style={styles.brand}>TotoStore</BrandLabel>
-          </View>
-          <IconButton name="notifications" onPress={() => {}} />
-        </View>
+      <FlatList
+        data={listings}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item: listing }) => {
+          const listingKey = listing.id;
+          const listingDisplay = {
+            listingId: listing.id,
+            sellerId: listing.seller_id,
+            sellerPhone: listing.seller?.phone || null,
+            title: listing.title,
+            price: Number(listing.price),
+            model: listing.model,
+            type: 'passenger' as const,
+            batteryCondition: listing.battery_condition || 'good',
+            registrationNumber: listing.registration_number || '',
+            yearOfPurchase: Number(listing.year || 2024),
+            condition: listing.condition || 'used',
+            description: listing.description || '',
+            photos: listing.photos || [],
+            location: {
+              city: listing.location_city || 'Unknown',
+              state: listing.location_state || 'Unknown',
+              lat: 0,
+              lng: 0,
+            },
+            status: listing.status,
+            createdAt: listing.created_at,
+            updatedAt: listing.updated_at,
+            id: listing.id,
+          };
 
-        <View style={styles.searchWrap}>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={() => router.push({ pathname: '/search', params: { query: searchQuery } })}
-            onFilterPress={() => router.push('/filters')}
-          />
-        </View>
-
-        
-
-        <View style={styles.section}>
-          <SectionHeader title="Featured Autos" actionLabel="View all" onActionPress={() => router.push('/search')} />
-          {loading ? (
-            <View style={styles.loaderBox}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loaderText}>Loading listings...</Text>
+          return (
+            <View style={styles.cardWrap}>
+              <ListingCard
+                listing={listingDisplay}
+                variant="list"
+                saved={!!saved[listingKey]}
+                onToggleSave={() => toggleSave(listingKey)}
+                onPress={() => router.push(`/listing/${listingKey}`)}
+              />
             </View>
-          ) : error ? (
-            <View style={styles.loaderBox}>
-              <Text style={styles.errorText}>{error}</Text>
-              <AppButton label="Retry" fullWidth={false} onPress={fetchListings} />
-            </View>
-          ) : listings.length === 0 ? (
-            <View style={styles.loaderBox}>
-              <Text style={styles.emptyText}>No listings yet.</Text>
-            </View>
-          ) : (
-            <View style={{ gap: 12 }}>
-              {listings.map((listing) => {
-                const listingKey = listing.id;
-                const listingDisplay = {
-                  listingId: listing.id,
-                  sellerId: listing.seller_id,
-                  sellerPhone: listing.seller?.phone || null,
-                  title: listing.title,
-                  price: Number(listing.price),
-                  model: listing.model,
-                  type: 'passenger' as const,
-                  batteryCondition: listing.battery_condition || 'good',
-                  registrationNumber: listing.registration_number || '',
-                  yearOfPurchase: Number(listing.year || 2024),
-                  condition: listing.condition || 'used',
-                  description: listing.description || '',
-                  photos: listing.photos || [],
-                  location: {
-                    city: listing.location_city || 'Unknown',
-                    state: listing.location_state || 'Unknown',
-                    lat: 0,
-                    lng: 0,
-                  },
-                  status: listing.status,
-                  createdAt: listing.created_at,
-                  updatedAt: listing.updated_at,
-                  id: listing.id,
-                };
-
-                return (
-                  <ListingCard
-                    key={listingKey}
-                    listing={listingDisplay}
-                    variant="list"
-                    saved={!!saved[listingKey]}
-                    onToggleSave={() => toggleSave(listingKey)}
-                    onPress={() => router.push(`/listing/${listingKey}`)}
-                  />
-                );
-              })}
-            </View>
-          )}
-        </View>
-      </ScrollView>
+          );
+        }}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        windowSize={7}
+        removeClippedSubviews
+      />
     </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { paddingBottom: 120 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.containerMargin,
-    paddingTop: 8,
-  },
-  locationRow: { flexDirection: 'row', alignItems: 'center' },
-  brand: { fontSize: 20, fontWeight: '800', color: colors.onSurface, marginLeft: 4 },
-  searchWrap: { paddingHorizontal: spacing.containerMargin, marginTop: 16 },
-  chipRow: { paddingHorizontal: spacing.containerMargin, paddingVertical: 16 },
-  section: { paddingHorizontal: spacing.containerMargin, marginTop: 8 },
-  loaderBox: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  loaderText: { marginTop: 12, color: colors.onSurfaceVariant },
-  errorText: { color: colors.error, fontWeight: '600', marginBottom: 12 },
-  emptyText: { color: colors.onSurfaceVariant, fontSize: 14 },
-});
+  )};
