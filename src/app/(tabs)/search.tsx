@@ -204,6 +204,9 @@ useEffect(() => {
               </View>
             ) : null
           }
+          initialNumToRender={6}
+          windowSize={7}
+          removeClippedSubviews
         />
       )}
     </SafeAreaView>
